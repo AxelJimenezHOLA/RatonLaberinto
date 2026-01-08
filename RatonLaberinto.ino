@@ -28,7 +28,20 @@
 /* CONFIGURACIONES */
 #define FREQUENCY_PWM 4000
 #define RESOLUTION_PWM 8
-#define MOTOR_SPEED 127
+#define BASE_SPEED 80
+
+/* PID */
+#define KP 0.09
+#define KI 0
+#define KD 0.005
+#define YST 2000
+
+int yPosition = 0;
+int errorP = 0;
+int errorI = 0;
+int errorD = 0;
+double u = 0;
+
 
 void setup() {
   Serial.begin(115200);
@@ -45,7 +58,7 @@ void setup() {
   ledcWrite(MOTOR_RIGHT_NEGATIVE, 0);
   ledcWrite(MOTOR_LEFT_POSITIVE, 0);
   ledcWrite(MOTOR_LEFT_NEGATIVE, 0);
-  
+
   // Inicializar pines digitales
   pinMode(PUSH, INPUT_PULLUP);
   pinMode(LED, OUTPUT);
@@ -63,17 +76,29 @@ void setup() {
 }
 
 void loop() {
-  Serial.println(digitalRead(PUSH));
-  setMotors(MOTOR_SPEED, MOTOR_SPEED);
-  delay(3000);
-  setMotors(0, 0);
-  delay(3000);
-  setMotors(-MOTOR_SPEED, -MOTOR_SPEED);
-  delay(3000);
-  setMotors(0, 0);
-  delay(3000);
+  updatePID();
+
+  // Velocidad de motores con PID
+  if (u > 0)
+    setMotors(BASE_SPEED, BASE_SPEED - u);
+  else
+    setMotors(BASE_SPEED + u, BASE_SPEED);
 }
 
+/* FUNCIONES PID */
+void updatePID() {
+  yPosition = analogRead(IR2);
+
+  // Errores calculados
+  errorP = YST - yPosition;
+  errorI += errorP;
+  errorD = errorP - previousError;
+
+  u = KP * errorP + KI * errorI + KD * errorD;
+  previousError = errorP;
+}
+
+/* FUNCIONES DE MOTOR */
 void setMotors(int leftMotorSpeed, int rightMotorSpeed) {
   setMotor(MOTOR_LEFT_POSITIVE, MOTOR_LEFT_NEGATIVE, leftMotorSpeed);
   setMotor(MOTOR_RIGHT_POSITIVE, MOTOR_RIGHT_NEGATIVE, rightMotorSpeed);
@@ -92,4 +117,34 @@ void setMotor(int motorPin1, int motorPin2, int speed) {
     ledcWrite(motorPin1, 0);
     ledcWrite(motorPin2, 0);
   }
+}
+
+/* FUNCIONES DE PRUEBA */
+void motorTest() {
+  setMotors(BASE_SPEED, BASE_SPEED);
+  delay(3000);
+  setMotors(0, 0);
+  delay(3000);
+  setMotors(-BASE_SPEED, -BASE_SPEED);
+  delay(3000);
+  setMotors(0, 0);
+  delay(3000);
+}
+
+void irTest() {
+  Serial.print(analogRead(BATTERY) * (3.3 / 4095.0));
+  Serial.print("\t");
+  Serial.print(analogRead(IR0));
+  Serial.print("\t");
+  Serial.print(analogRead(IR1));
+  Serial.print("\t");
+  Serial.print(analogRead(IR2));
+  Serial.print("\t");
+  Serial.print(analogRead(IR3));
+  Serial.print("\t");
+  Serial.print(analogRead(IR4));
+  Serial.print("\t");
+  Serial.print(analogRead(IR5));
+  Serial.print("\t");
+  Serial.println(analogRead(IR6));
 }
