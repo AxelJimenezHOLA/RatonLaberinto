@@ -28,20 +28,21 @@
 /* CONFIGURACIONES */
 #define FREQUENCY_PWM 4000
 #define RESOLUTION_PWM 8
-#define BASE_SPEED 80
+#define BASE_SPEED 115
 
 /* PID */
-#define KP 0.09
+#define KP 0.095
 #define KI 0
-#define KD 0.005
+#define KD 0.0055
 #define YST 2000
 
-int yPosition = 0;
+int y = 0;
+float u = 0;
+
 int errorP = 0;
 int errorI = 0;
 int errorD = 0;
-double u = 0;
-
+int previousError = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -65,9 +66,13 @@ void setup() {
 
   // Secuencia de inicio
   digitalWrite(LED, HIGH);
-  while (digitalRead(PUSH));
+  while (digitalRead(PUSH)) {
+    irTest();
+    updatePID();
+    setMotors(u, -u);
+  }
 
-  for (int k = 0; k < 5; k++) {
+  for (int k = 0; k < 3; k++) {
     digitalWrite(LED, HIGH);
     delay(500);
     digitalWrite(LED, LOW);
@@ -77,25 +82,27 @@ void setup() {
 
 void loop() {
   updatePID();
-
-  // Velocidad de motores con PID
-  if (u > 0)
-    setMotors(BASE_SPEED, BASE_SPEED - u);
-  else
-    setMotors(BASE_SPEED + u, BASE_SPEED);
+  changeSpeedWithPWD();
 }
 
 /* FUNCIONES PID */
 void updatePID() {
-  yPosition = analogRead(IR2);
+  y = analogRead(IR2);
 
   // Errores calculados
-  errorP = YST - yPosition;
+  errorP = YST - y;
   errorI += errorP;
   errorD = errorP - previousError;
 
   u = KP * errorP + KI * errorI + KD * errorD;
   previousError = errorP;
+}
+
+void changeSpeedWithPWD() {
+  if (u > 0)
+    setMotors(BASE_SPEED, BASE_SPEED - u);
+  else
+    setMotors(BASE_SPEED + u, BASE_SPEED);
 }
 
 /* FUNCIONES DE MOTOR */
@@ -132,7 +139,7 @@ void motorTest() {
 }
 
 void irTest() {
-  Serial.print(analogRead(BATTERY) * (3.3 / 4095.0));
+  Serial.print(analogRead(BATTERY) * (3.3 / 4096.0));
   Serial.print("\t");
   Serial.print(analogRead(IR0));
   Serial.print("\t");
