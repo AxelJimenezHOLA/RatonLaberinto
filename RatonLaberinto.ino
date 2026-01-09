@@ -38,7 +38,6 @@
 
 int y = 0;
 float u = 0;
-
 int errorP = 0;
 int errorI = 0;
 int errorD = 0;
@@ -56,12 +55,11 @@ int previousError = 0;
 #include <RemoteXY.h>
 
 #pragma pack(push, 1)  
-uint8_t const PROGMEM RemoteXY_CONF_PROGMEM[] =   // 85 bytes V19 
-  { 255,6,0,0,0,78,0,19,0,0,0,65,120,101,108,0,31,2,106,200,
-  200,84,1,1,4,0,5,207,33,143,143,19,10,60,60,0,2,26,31,5,
-  3,24,143,143,120,10,60,60,0,2,26,31,4,36,31,7,86,93,15,16,
-  48,0,2,26,2,35,242,23,52,94,9,14,6,0,2,26,31,31,79,78,
-  0,79,70,70,0 };
+uint8_t const PROGMEM RemoteXY_CONF_PROGMEM[] =   // 78 bytes V19 
+  { 255,5,0,2,0,71,0,19,0,0,0,65,120,101,108,0,31,2,106,200,
+  200,84,1,1,4,0,5,207,26,143,143,16,14,60,60,0,2,26,31,1,
+  57,72,57,57,133,21,52,52,0,2,31,0,67,44,164,21,24,85,26,40,
+  10,86,2,26,7,43,109,24,24,84,46,40,10,118,64,2,26,2 };
   
 // this structure defines all the variables and events of your control interface 
 struct {
@@ -69,10 +67,11 @@ struct {
     // input variables
   int8_t joystick_01_x; // from -100 to 100
   int8_t joystick_01_y; // from -100 to 100
-  int8_t joystick_02_x; // from -100 to 100
-  int8_t joystick_02_y; // from -100 to 100
-  int8_t slider_01; // from 0 to 100
-  uint8_t switch_01; // =1 if switch ON and =0 if OFF, from 0 to 1
+  uint8_t button_01; // =1 if button pressed, else =0, from 0 to 1
+  int16_t edit_01; // -32768 .. +32767
+
+    // output variables
+  int16_t value_01; // -32768 .. +32767
 
     // other variable
   uint8_t connect_flag;  // =1 if wire connected, else =0
@@ -105,7 +104,7 @@ void setup() {
   // Secuencia de inicio
   digitalWrite(LED, HIGH);
   while (digitalRead(PUSH)) {
-    irDebugPrint();
+    //irDebugPrint();
     updatePID();
     setMotors(u, -u);
   }
@@ -120,31 +119,11 @@ void setup() {
 
 void loop() {
   RemoteXYEngine.handler(); 
-  updatePID();
-  changeSpeedWithPWD();
+  handleController();
+  //updatePID();
+  //changeSpeedWithPWD();
 }
 
-/* FUNCIONES PID */
-void updatePID() {
-  y = analogRead(IR2);
-
-  // Errores calculados
-  errorP = YST - y;
-  errorI += errorP;
-  errorD = errorP - previousError;
-
-  u = KP * errorP + KI * errorI + KD * errorD;
-  previousError = errorP;
-}
-
-void changeSpeedWithPWD() {
-  if (u > 0)
-    setMotors(BASE_SPEED, BASE_SPEED - u);
-  else
-    setMotors(BASE_SPEED + u, BASE_SPEED);
-}
-
-/* FUNCIONES DE MOTOR */
 void setMotors(int leftMotorSpeed, int rightMotorSpeed) {
   setMotor(MOTOR_LEFT_POSITIVE, MOTOR_LEFT_NEGATIVE, leftMotorSpeed);
   setMotor(MOTOR_RIGHT_POSITIVE, MOTOR_RIGHT_NEGATIVE, rightMotorSpeed);
@@ -165,7 +144,36 @@ void setMotor(int motorPin1, int motorPin2, int speed) {
   }
 }
 
-/* FUNCIONES DE PRUEBA */
+void handleController() {
+  int speed = constrain(RemoteXY.edit_01, 0, 255);
+  RemoteXY.value_01 = speed;
+  if (RemoteXY.joystick_01_x == 0) {
+    setMotors(speed * button, speed * button);
+  } else {
+    setMotors((RemoteXY.joystick_01_x * 0.01) * speed * RemoteXY.button_01, (RemoteXY.joystick_01_x * 0.01) * -speed * RemoteXY.button_01);
+  }
+}
+
+void updatePID() {
+  y = analogRead(IR2);
+
+  // Errores calculados
+  errorP = YST - y;
+  errorI += errorP;
+  errorD = errorP - previousError;
+
+  u = KP * errorP + KI * errorI + KD * errorD;
+  previousError = errorP;
+}
+
+void changeSpeedWithPWD() {
+  if (u > 0)
+    setMotors(BASE_SPEED, BASE_SPEED - u);
+  else
+    setMotors(BASE_SPEED + u, BASE_SPEED);
+}
+
+/*
 void motorTest() {
   setMotors(BASE_SPEED, BASE_SPEED);
   delay(3000);
@@ -179,7 +187,7 @@ void motorTest() {
 
 void irDebugPrint() {
   digitalWrite(LED_ON, 1);
-  Serial.print(analogRead(BATTERY) * (3.3 / 4096.0));
+  Serial.print(analogRead(BATTERY) * 0.000805664062); // El valor equivale a 3.3 / 4096
   Serial.print("\t");
   Serial.print(analogRead(IR0));
   Serial.print("\t");
@@ -196,3 +204,4 @@ void irDebugPrint() {
   Serial.println(analogRead(IR6));
   digitalWrite(LED_ON, 0);
 }
+*/
