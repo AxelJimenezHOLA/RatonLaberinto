@@ -148,7 +148,7 @@ void handleController() {
   int speed = constrain(RemoteXY.edit_01, 0, 255);
   RemoteXY.value_01 = speed;
   if (RemoteXY.joystick_01_x == 0) {
-    setMotors(speed * button, speed * button);
+    setMotors(speed * RemoteXY.button_01, speed * RemoteXY.button_01);
   } else {
     setMotors((RemoteXY.joystick_01_x * 0.01) * speed * RemoteXY.button_01, (RemoteXY.joystick_01_x * 0.01) * -speed * RemoteXY.button_01);
   }
