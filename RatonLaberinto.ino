@@ -44,7 +44,44 @@ int errorI = 0;
 int errorD = 0;
 int previousError = 0;
 
+/* CONTROL REMOTO */
+#define REMOTEXY__DEBUGLOG
+#define REMOTEXY_MODE__ESP32CORE_BLE
+
+#include <BLEDevice.h>
+
+#define REMOTEXY_BLUETOOTH_NAME "RemoteXY"
+#define REMOTEXY_ACCESS_PASSWORD "hola"
+
+#include <RemoteXY.h>
+
+#pragma pack(push, 1)  
+uint8_t const PROGMEM RemoteXY_CONF_PROGMEM[] =   // 85 bytes V19 
+  { 255,6,0,0,0,78,0,19,0,0,0,65,120,101,108,0,31,2,106,200,
+  200,84,1,1,4,0,5,207,33,143,143,19,10,60,60,0,2,26,31,5,
+  3,24,143,143,120,10,60,60,0,2,26,31,4,36,31,7,86,93,15,16,
+  48,0,2,26,2,35,242,23,52,94,9,14,6,0,2,26,31,31,79,78,
+  0,79,70,70,0 };
+  
+// this structure defines all the variables and events of your control interface 
+struct {
+
+    // input variables
+  int8_t joystick_01_x; // from -100 to 100
+  int8_t joystick_01_y; // from -100 to 100
+  int8_t joystick_02_x; // from -100 to 100
+  int8_t joystick_02_y; // from -100 to 100
+  int8_t slider_01; // from 0 to 100
+  uint8_t switch_01; // =1 if switch ON and =0 if OFF, from 0 to 1
+
+    // other variable
+  uint8_t connect_flag;  // =1 if wire connected, else =0
+
+} RemoteXY;   
+#pragma pack(pop)
+
 void setup() {
+  RemoteXY_Init();
   Serial.begin(115200);
   Serial.println("Iniciando");
 
@@ -63,11 +100,12 @@ void setup() {
   // Inicializar pines digitales
   pinMode(PUSH, INPUT_PULLUP);
   pinMode(LED, OUTPUT);
+  pinMode(LED_ON, OUTPUT);
 
   // Secuencia de inicio
   digitalWrite(LED, HIGH);
   while (digitalRead(PUSH)) {
-    irTest();
+    irDebugPrint();
     updatePID();
     setMotors(u, -u);
   }
@@ -81,6 +119,7 @@ void setup() {
 }
 
 void loop() {
+  RemoteXYEngine.handler(); 
   updatePID();
   changeSpeedWithPWD();
 }
@@ -138,7 +177,8 @@ void motorTest() {
   delay(3000);
 }
 
-void irTest() {
+void irDebugPrint() {
+  digitalWrite(LED_ON, 1);
   Serial.print(analogRead(BATTERY) * (3.3 / 4096.0));
   Serial.print("\t");
   Serial.print(analogRead(IR0));
@@ -154,4 +194,5 @@ void irTest() {
   Serial.print(analogRead(IR5));
   Serial.print("\t");
   Serial.println(analogRead(IR6));
+  digitalWrite(LED_ON, 0);
 }
