@@ -28,20 +28,20 @@
 /* CONFIGURACIONES */
 #define FREQUENCY_PWM 4000
 #define RESOLUTION_PWM 8
-#define BASE_SPEED 115
+int speed = 0;
 
 /* PID */
-#define KP 0.095
-#define KI 0
-#define KD 0.0055
-#define YST 2000
+int YST = 2000;
+double KP = 0.095;
+double KI = 0;
+double KD = 0.0055;
 
 int y = 0;
-float u = 0;
-int errorP = 0;
-int errorI = 0;
-int errorD = 0;
-int previousError = 0;
+double u = 0;
+double errorP = 0;
+double errorI = 0;
+double errorD = 0;
+double previousError = 0;
 
 /* CONTROL REMOTO */
 #define REMOTEXY__DEBUGLOG
@@ -49,34 +49,34 @@ int previousError = 0;
 
 #include <BLEDevice.h>
 
-#define REMOTEXY_BLUETOOTH_NAME "RemoteXY"
-#define REMOTEXY_ACCESS_PASSWORD "hola"
+#define REMOTEXY_BLUETOOTH_NAME "RatonLaberinto"
 
 #include <RemoteXY.h>
 
 #pragma pack(push, 1)  
-uint8_t const PROGMEM RemoteXY_CONF_PROGMEM[] =   // 78 bytes V19 
-  { 255,5,0,2,0,71,0,19,0,0,0,65,120,101,108,0,31,2,106,200,
-  200,84,1,1,4,0,5,207,26,143,143,16,14,60,60,0,2,26,31,1,
-  57,72,57,57,133,21,52,52,0,2,31,0,67,44,164,21,24,85,26,40,
-  10,86,2,26,7,43,109,24,24,84,46,40,10,118,64,2,26,2 };
+uint8_t const PROGMEM RemoteXY_CONF_PROGMEM[] =   // 114 bytes V19 
+  { 255,17,0,0,0,107,0,19,0,0,0,76,97,98,101,114,105,110,116,111,
+  65,76,0,69,2,106,200,200,84,1,1,5,0,7,8,78,24,24,44,10,
+  63,10,110,64,2,26,2,7,7,5,86,24,24,109,22,40,10,110,64,2,
+  26,2,1,7,5,138,24,24,44,22,63,10,110,64,2,26,2,7,7,68,
+  33,24,24,109,10,40,10,110,64,2,26,2,1,10,26,110,57,57,44,42,
+  105,31,49,4,1,31,79,78,0,31,79,70,70,0 };
   
 // this structure defines all the variables and events of your control interface 
 struct {
 
     // input variables
-  int8_t joystick_01_x; // from -100 to 100
-  int8_t joystick_01_y; // from -100 to 100
-  uint8_t button_01; // =1 if button pressed, else =0, from 0 to 1
-  int16_t edit_01; // -32768 .. +32767
-
-    // output variables
-  int16_t value_01; // -32768 .. +32767
+  float edit_kp;
+  float edit_yst;
+  float edit_kd;
+  float edit_speed;
+  uint8_t pushSwitch_01; // =1 if state is ON, else =0, from 0 to 1
 
     // other variable
   uint8_t connect_flag;  // =1 if wire connected, else =0
 
 } RemoteXY;   
+
 #pragma pack(pop)
 
 void setup() {
@@ -101,27 +101,15 @@ void setup() {
   pinMode(LED, OUTPUT);
   pinMode(LED_ON, OUTPUT);
 
-  // Secuencia de inicio
-  digitalWrite(LED, HIGH);
-  while (digitalRead(PUSH)) {
-    //irDebugPrint();
-    updatePID();
-    setMotors(u, -u);
-  }
-
-  for (int k = 0; k < 3; k++) {
-    digitalWrite(LED, HIGH);
-    delay(500);
-    digitalWrite(LED, LOW);
-    delay(500);
-  }
+  digitalWrite(LED,1);
+  //secuenciaInicio();
 }
 
 void loop() {
   RemoteXYEngine.handler(); 
-  handleController();
-  //updatePID();
-  //changeSpeedWithPWD();
+  updateRemote();
+  updatePID();
+  changeSpeedWithPWM();
 }
 
 void setMotors(int leftMotorSpeed, int rightMotorSpeed) {
@@ -144,14 +132,11 @@ void setMotor(int motorPin1, int motorPin2, int speed) {
   }
 }
 
-void handleController() {
-  int speed = constrain(RemoteXY.edit_01, 0, 255);
-  RemoteXY.value_01 = speed;
-  if (RemoteXY.joystick_01_x == 0) {
-    setMotors(speed * RemoteXY.button_01, speed * RemoteXY.button_01);
-  } else {
-    setMotors((RemoteXY.joystick_01_x * 0.01) * speed * RemoteXY.button_01, (RemoteXY.joystick_01_x * 0.01) * -speed * RemoteXY.button_01);
-  }
+void updateRemote() {
+  KP = RemoteXY.edit_kp * RemoteXY.pushSwitch_01;
+  KD = RemoteXY.edit_kd * RemoteXY.pushSwitch_01;
+  speed = RemoteXY.edit_speed * RemoteXY.pushSwitch_01;
+  YST = RemoteXY.edit_yst * RemoteXY.pushSwitch_01;
 }
 
 void updatePID() {
@@ -166,25 +151,29 @@ void updatePID() {
   previousError = errorP;
 }
 
-void changeSpeedWithPWD() {
+void changeSpeedWithPWM() {
   if (u > 0)
-    setMotors(BASE_SPEED, BASE_SPEED - u);
+    setMotors(speed, speed - u);
   else
-    setMotors(BASE_SPEED + u, BASE_SPEED);
+    setMotors(speed + u, speed);
 }
 
+void secuenciaInicio() {
+  digitalWrite(LED, HIGH);
+  while (digitalRead(PUSH)) {
+    //irDebugPrint();
+    updatePID();
+    setMotors(u, -u);
+  }
+
+  for (int k = 0; k < 3; k++) {
+    digitalWrite(LED, HIGH);
+    delay(500);
+    digitalWrite(LED, LOW);
+    delay(500);
+  }
+}
 /*
-void motorTest() {
-  setMotors(BASE_SPEED, BASE_SPEED);
-  delay(3000);
-  setMotors(0, 0);
-  delay(3000);
-  setMotors(-BASE_SPEED, -BASE_SPEED);
-  delay(3000);
-  setMotors(0, 0);
-  delay(3000);
-}
-
 void irDebugPrint() {
   digitalWrite(LED_ON, 1);
   Serial.print(analogRead(BATTERY) * 0.000805664062); // El valor equivale a 3.3 / 4096
