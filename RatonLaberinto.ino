@@ -1,6 +1,5 @@
 // Board: Node32s
 
-/* MOTORES */
 #define MOTOR_RIGHT_POSITIVE 16
 #define MOTOR_RIGHT_NEGATIVE 17
 #define MOTOR_RIGHT_A 35
@@ -10,7 +9,6 @@
 #define MOTOR_LEFT_A 23
 #define MOTOR_LEFT_B 19
 
-/* SENSORES INFRARROJOS */
 #define IR0 36
 #define IR1 33
 #define IR2 25
@@ -20,21 +18,35 @@
 #define IR6 39
 #define LED_ON 14
 
-/* OTROS PINES */
 #define PUSH 12
 #define BATTERY 13
 #define LED 5
 
-/* CONFIGURACIONES */
 #define FREQUENCY_PWM 4000
 #define RESOLUTION_PWM 8
 #define BASE_SPEED 220
 
-/* PID */
+//PID
 #define KP 0.6
 #define KI 0
 #define KD 2.2
-#define YST 1200
+#define YST 700
+
+//Promedio de resultados anteriores
+#define WINDOW_SIZE 5
+int window[WINDOW_SIZE];
+int windowIndex = 0;
+long windowSum = 0;
+
+#define RETRASO 220        
+#define TIEMPO_DE_CORRECCION 200      
+#define RANGO 10     
+
+unsigned long ultimoMovimiento = 0;
+unsigned long iniciarArreglo = 0;
+bool arreglando = false;
+int YP = 0;
+/* ================================ */
 
 int y = 0;
 float u = 0;
@@ -48,23 +60,26 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Iniciando");
 
-  // PWM de los motores
   ledcAttach(MOTOR_RIGHT_POSITIVE, FREQUENCY_PWM, RESOLUTION_PWM);
   ledcAttach(MOTOR_RIGHT_NEGATIVE, FREQUENCY_PWM, RESOLUTION_PWM);
   ledcAttach(MOTOR_LEFT_POSITIVE, FREQUENCY_PWM, RESOLUTION_PWM);
   ledcAttach(MOTOR_LEFT_NEGATIVE, FREQUENCY_PWM, RESOLUTION_PWM);
 
-  // Inicializar motores en velocidad 0
-  ledcWrite(MOTOR_RIGHT_POSITIVE, 0);
-  ledcWrite(MOTOR_RIGHT_NEGATIVE, 0);
-  ledcWrite(MOTOR_LEFT_POSITIVE, 0);
-  ledcWrite(MOTOR_LEFT_NEGATIVE, 0);
+  setMotors(0, 0);
 
-  // Inicializar pines digitales
   pinMode(PUSH, INPUT_PULLUP);
   pinMode(LED, OUTPUT);
 
-  // Secuencia de inicio
+  //Promedio de sensores
+  for (int i = 0; i < WINDOW_SIZE; i++) {
+    int initVal = (analogRead(IR1) + analogRead(IR2)) / 2;
+    window[i] = initVal;
+    windowSum += initVal;
+  }
+
+  ultimoMovimiento = millis();
+  YP = windowSum / WINDOW_SIZE;
+
   digitalWrite(LED, HIGH);
   while (digitalRead(PUSH)) {
     irTest();
@@ -82,19 +97,43 @@ void setup() {
 
 void loop() {
   updatePID();
+
+  //Detección de bloqueo de movimiento
+  if (abs(y - YP) > RANGO) {
+    ultimoMovimiento = millis();
+    YP = y;
+  }
+
+  if (!arreglando && millis() - ultimoMovimiento > RETRASO) {
+    arreglando = true;
+    iniciarArreglo = millis();
+  }
+
+  //Corrección de movimiento
+  if (arreglando) {
+    setMotors(120, 180);
+
+    if (millis() - iniciarArreglo > TIEMPO_DE_CORRECCION) {
+      arreglando = false;
+      ultimoMovimiento = millis();
+    }
+    return;
+  }
   setMotors(BASE_SPEED + u, BASE_SPEED - u);
 }
 
-/* FUNCIONES PID */
 void updatePID() {
-  int ir[] = {analogRead(IR1), analogRead(IR2)};
-  int sum = 0;
-  int n = sizeof(ir)/sizeof(ir[0]);
-  for (int i = 0; i < n; i++) sum += ir[i];
+  int raw = (analogRead(IR1) + analogRead(IR2)) / 2;
+  //Filtro de ventana 
+  windowSum -= window[windowIndex];
+  window[windowIndex] = raw;
+  windowSum += raw;
 
-  y = sum / n;
+  windowIndex++;
+  if (windowIndex >= WINDOW_SIZE) windowIndex = 0;
 
-  // Errores calculados
+  y = windowSum / WINDOW_SIZE;
+
   errorP = YST - y;
   errorI += errorP;
   errorD = errorP - previousError;
@@ -103,21 +142,13 @@ void updatePID() {
   previousError = errorP;
 }
 
-void changeSpeedWithPID() {
-  if (u > 0)
-    setMotors(BASE_SPEED, BASE_SPEED - u);
-  else
-    setMotors(BASE_SPEED + u, BASE_SPEED);
-}
-
-/* FUNCIONES DE MOTOR */
 void setMotors(int leftMotorSpeed, int rightMotorSpeed) {
   setMotor(MOTOR_LEFT_POSITIVE, MOTOR_LEFT_NEGATIVE, leftMotorSpeed);
   setMotor(MOTOR_RIGHT_POSITIVE, MOTOR_RIGHT_NEGATIVE, rightMotorSpeed);
 }
 
 void setMotor(int motorPin1, int motorPin2, int speed) {
-  speed = constrain(speed, -255, 255);
+  speed = constrain(speed, -220, 220);
 
   if (speed > 0) {
     ledcWrite(motorPin1, speed);
@@ -131,7 +162,6 @@ void setMotor(int motorPin1, int motorPin2, int speed) {
   }
 }
 
-/* FUNCIONES DE PRUEBA */
 void irTest() {
   Serial.print(analogRead(IR0));
   Serial.print("\t");
